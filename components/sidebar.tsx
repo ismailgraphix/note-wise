@@ -4,7 +4,6 @@ import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { PlusCircle, Folder, FileText } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { useToast } from "@/hooks/use-toast"
 
 interface Note {
   id: string

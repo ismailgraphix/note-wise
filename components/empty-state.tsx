@@ -8,7 +8,7 @@ export default function EmptyState() {
       </div>
       <h2 className="text-lg md:text-xl font-semibold mb-2">No note selected</h2>
       <p className="text-sm md:text-base text-muted-foreground max-w-[280px] md:max-w-md">
-        Create a new note using the "New Note" button or select an existing note from the sidebar to get started.
+        Create a new note using the &ldquo;New Note&rdquo; button or select an existing note from the sidebar to get started.
       </p>
     </div>
   )
