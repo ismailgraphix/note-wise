@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { MoonIcon, SunIcon } from "lucide-react"
@@ -11,7 +11,13 @@ export default function Editor() {
   const [content, setContent] = useState("")
   const { theme, setTheme } = useTheme()
   const [isLoading, setIsLoading] = useState(false)
+  const [mounted, setMounted] = useState(false)
   const { toast } = useToast()
+
+  // Handle mounting state
+  useEffect(() => {
+    setMounted(true)
+  }, [])
 
   const handleSummarize = async () => {
     if (!content.trim()) {
@@ -65,11 +71,20 @@ export default function Editor() {
   }
 
   return (
-    <div className="flex-1 p-6">
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-bold">YOUR NOTE</h1>
-        <Button variant="ghost" size="icon" onClick={() => setTheme(theme === "dark" ? "light" : "dark")}>
-          {theme === "dark" ? <SunIcon /> : <MoonIcon />}
+    <div className="flex-1 p-4 md:p-6 max-w-4xl mx-auto w-full">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 sm:gap-0 mb-4 md:mb-6">
+        <h1 className="text-xl md:text-2xl font-bold">YOUR NOTE</h1>
+        <Button 
+          variant="ghost" 
+          size="icon" 
+          onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+          className="self-end sm:self-auto"
+        >
+          {mounted && (
+            theme === "dark" ? 
+              <SunIcon className="h-5 w-5" /> : 
+              <MoonIcon className="h-5 w-5" />
+          )}
         </Button>
       </div>
 
@@ -77,12 +92,18 @@ export default function Editor() {
         value={content}
         onChange={(e) => setContent(e.target.value)}
         placeholder="Start writing..."
-        className="min-h-[400px] resize-none bg-background border rounded-lg p-4 mb-4"
+        className="min-h-[200px] sm:min-h-[300px] md:min-h-[400px] resize-none bg-background border rounded-lg p-3 md:p-4 mb-4 text-sm md:text-base"
       />
 
-      <div className="flex justify-between items-center">
-        <span className="text-sm text-muted-foreground">{content.length} Characters</span>
-        <Button onClick={handleSummarize} disabled={isLoading}>
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 sm:gap-0">
+        <span className="text-xs md:text-sm text-muted-foreground order-2 sm:order-1">
+          {content.length} Characters
+        </span>
+        <Button 
+          onClick={handleSummarize} 
+          disabled={isLoading}
+          className="w-full sm:w-auto order-1 sm:order-2"
+        >
           {isLoading ? "Summarizing..." : "Summarize"}
         </Button>
       </div>
