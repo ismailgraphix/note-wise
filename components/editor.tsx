@@ -2,22 +2,50 @@
 
 import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
-import { MoonIcon, SunIcon } from "lucide-react"
+import { MoonIcon, SunIcon, Save } from "lucide-react"
 import { useTheme } from "next-themes"
 import { useToast } from "@/hooks/use-toast"
+import type { Note } from "@/types/note"
 
-export default function Editor() {
-  const [content, setContent] = useState("")
+interface EditorProps {
+  note: Note
+  onUpdateNote: (updatedNote: Note) => void
+}
+
+export default function Editor({ note, onUpdateNote }: EditorProps) {
+  const [title, setTitle] = useState(note.title)
+  const [content, setContent] = useState(note.content)
   const { theme, setTheme } = useTheme()
   const [isLoading, setIsLoading] = useState(false)
   const [mounted, setMounted] = useState(false)
   const { toast } = useToast()
 
+  // Update local state when note changes
+  useEffect(() => {
+    setTitle(note.title)
+    setContent(note.content)
+  }, [note])
+
   // Handle mounting state
   useEffect(() => {
     setMounted(true)
   }, [])
+
+  const handleSave = () => {
+    const updatedNote: Note = {
+      ...note,
+      title,
+      content,
+      updatedAt: new Date().toISOString()
+    }
+    onUpdateNote(updatedNote)
+    toast({
+      title: "Note saved",
+      description: "Your changes have been saved successfully."
+    })
+  }
 
   const handleSummarize = async () => {
     if (!content.trim()) {
@@ -31,8 +59,6 @@ export default function Editor() {
 
     setIsLoading(true)
     try {
-      console.log("Sending content for summarization:", content.substring(0, 50) + "...")
-
       const response = await fetch("/api/summarize", {
         method: "POST",
         headers: {
@@ -41,20 +67,19 @@ export default function Editor() {
         body: JSON.stringify({ content }),
       })
 
-      console.log("Response status:", response.status)
       const data = await response.json()
-      console.log("Response data:", data)
 
       if (!response.ok) {
         throw new Error(data.error || "Failed to summarize")
       }
 
       if (data.summary) {
+        setContent(data.summary)
+        handleSave() // Save the summarized content
         toast({
           title: "Summary created",
           description: "Your note has been summarized successfully.",
         })
-        setContent(data.summary)
       } else {
         throw new Error("No summary returned from API")
       }
@@ -73,19 +98,34 @@ export default function Editor() {
   return (
     <div className="flex-1 p-4 md:p-6 max-w-4xl mx-auto w-full">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 sm:gap-0 mb-4 md:mb-6">
-        <h1 className="text-xl md:text-2xl font-bold">YOUR NOTE</h1>
-        <Button 
-          variant="ghost" 
-          size="icon" 
-          onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
-          className="self-end sm:self-auto"
-        >
-          {mounted && (
-            theme === "dark" ? 
-              <SunIcon className="h-5 w-5" /> : 
-              <MoonIcon className="h-5 w-5" />
-          )}
-        </Button>
+        <div className="flex-1 w-full">
+          <Input
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            className="text-xl md:text-2xl font-bold bg-transparent border-0 p-0 focus-visible:ring-0"
+            placeholder="Note title..."
+          />
+        </div>
+        <div className="flex items-center gap-2 self-end sm:self-auto">
+          <Button 
+            variant="outline" 
+            size="icon"
+            onClick={handleSave}
+          >
+            <Save className="h-5 w-5" />
+          </Button>
+          <Button 
+            variant="ghost" 
+            size="icon" 
+            onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+          >
+            {mounted && (
+              theme === "dark" ? 
+                <SunIcon className="h-5 w-5" /> : 
+                <MoonIcon className="h-5 w-5" />
+            )}
+          </Button>
+        </div>
       </div>
 
       <Textarea
@@ -97,7 +137,7 @@ export default function Editor() {
 
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 sm:gap-0">
         <span className="text-xs md:text-sm text-muted-foreground order-2 sm:order-1">
-          {content.length} Characters
+          Last updated: {new Date(note.updatedAt).toLocaleDateString()}
         </span>
         <Button 
           onClick={handleSummarize} 
