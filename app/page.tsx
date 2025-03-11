@@ -1,133 +1,294 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Menu } from "lucide-react"
-import { Button } from "@/components/ui/button"
-import { cn } from "@/lib/utils"
 import Sidebar from "@/components/sidebar"
 import Editor from "@/components/editor"
-import EmptyState from "@/components/empty-state"
-import type { Note } from "@/types/note"
+import { UserNav } from "@/components/user-nav"
+import { Button } from "@/components/ui/button"
+import { MenuIcon } from "lucide-react"
+import { useToast } from "@/hooks/use-toast"
 
-export interface Folder {
+interface Note {
+  id: string
+  title: string
+  content: string
+  folderId: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+interface Folder {
   id: string
   name: string
+  notes: Note[]
 }
 
 export default function Home() {
   const [notes, setNotes] = useState<Note[]>([])
-  const [folders, setFolders] = useState<Folder[]>([
-    { id: "1", name: "Personal" },
-    { id: "2", name: "Work" },
-    { id: "3", name: "Travel" },
-  ])
+  const [folders, setFolders] = useState<Folder[]>([])
   const [selectedNote, setSelectedNote] = useState<Note | null>(null)
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false)
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true)
+  const { toast } = useToast()
 
-  // Load notes and folders from localStorage on mount
   useEffect(() => {
-    const savedNotes = localStorage.getItem("notes")
-    const savedFolders = localStorage.getItem("folders")
-    if (savedNotes) setNotes(JSON.parse(savedNotes))
-    if (savedFolders) setFolders(JSON.parse(savedFolders))
+    fetchFolders()
+    fetchNotes()
   }, [])
 
-  // Save notes and folders to localStorage whenever they change
-  useEffect(() => {
-    localStorage.setItem("notes", JSON.stringify(notes))
-  }, [notes])
-
-  useEffect(() => {
-    localStorage.setItem("folders", JSON.stringify(folders))
-  }, [folders])
-
-  const handleUpdateNote = (updatedNote: Note) => {
-    const updatedNotes = notes.map(note => 
-      note.id === updatedNote.id ? updatedNote : note
-    )
-    setNotes(updatedNotes)
-    setSelectedNote(updatedNote)
-  }
-
-  const handleAddNote = (newNote: Note) => {
-    setNotes([newNote, ...notes])
-    setSelectedNote(newNote)
-  }
-
-  const handleDeleteNote = (noteId: string) => {
-    const updatedNotes = notes.filter(note => note.id !== noteId)
-    setNotes(updatedNotes)
-    if (selectedNote?.id === noteId) {
-      setSelectedNote(null)
+  async function fetchFolders() {
+    try {
+      const response = await fetch("/api/folders")
+      if (!response.ok) throw new Error("Failed to fetch folders")
+      const data = await response.json()
+      setFolders(data)
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to fetch folders",
+        variant: "destructive",
+      })
     }
   }
 
-  const handleUpdateFolder = (updatedFolder: Folder) => {
-    const updatedFolders = folders.map(folder =>
-      folder.id === updatedFolder.id ? updatedFolder : folder
-    )
-    setFolders(updatedFolders)
+  async function fetchNotes() {
+    try {
+      const response = await fetch("/api/notes")
+      if (!response.ok) throw new Error("Failed to fetch notes")
+      const data = await response.json()
+      setNotes(data)
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to fetch notes",
+        variant: "destructive",
+      })
+    }
   }
 
-  const handleAddFolder = (newFolder: Folder) => {
-    setFolders([...folders, newFolder])
+  async function addFolder(name: string) {
+    try {
+      const response = await fetch("/api/folders", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name }),
+      })
+      if (!response.ok) throw new Error("Failed to create folder")
+      const folder = await response.json()
+      setFolders([...folders, folder])
+      toast({
+        title: "Success",
+        description: "Folder created successfully",
+      })
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to create folder",
+        variant: "destructive",
+      })
+    }
   }
 
-  const handleDeleteFolder = (folderId: string) => {
-    const updatedFolders = folders.filter(folder => folder.id !== folderId)
-    setFolders(updatedFolders)
+  async function updateFolder(id: string, name: string) {
+    try {
+      const response = await fetch("/api/folders", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, name }),
+      })
+      if (!response.ok) throw new Error("Failed to update folder")
+      const updatedFolder = await response.json()
+      setFolders(folders.map(f => f.id === id ? updatedFolder : f))
+      toast({
+        title: "Success",
+        description: "Folder updated successfully",
+      })
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to update folder",
+        variant: "destructive",
+      })
+    }
+  }
+
+  async function deleteFolder(id: string) {
+    try {
+      const response = await fetch(`/api/folders?id=${id}`, {
+        method: "DELETE",
+      })
+      if (!response.ok) throw new Error("Failed to delete folder")
+      setFolders(folders.filter(f => f.id !== id))
+      setNotes(notes.filter(n => n.folderId !== id))
+      if (selectedNote?.folderId === id) setSelectedNote(null)
+      toast({
+        title: "Success",
+        description: "Folder deleted successfully",
+      })
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to delete folder",
+        variant: "destructive",
+      })
+    }
+  }
+
+  async function addNote(title: string, content: string = "", folderId: string | null = null) {
+    try {
+      const response = await fetch("/api/notes", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title, content, folderId }),
+      })
+      if (!response.ok) {
+        const error = await response.text()
+        throw new Error(error || "Failed to create note")
+      }
+      const note = await response.json()
+      setNotes([...notes, note])
+      
+      // Update folder notes if the note was added to a folder
+      if (folderId) {
+        setFolders(folders.map(folder => {
+          if (folder.id === folderId) {
+            return {
+              ...folder,
+              notes: [...(folder.notes || []), note]
+            }
+          }
+          return folder
+        }))
+      }
+      
+      setSelectedNote(note)
+      toast({
+        title: "Success",
+        description: "Note created successfully",
+      })
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to create note",
+        variant: "destructive",
+      })
+    }
+  }
+
+  async function updateNote(id: string, title: string, content: string) {
+    try {
+      const response = await fetch("/api/notes", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, title, content, folderId: selectedNote?.folderId }),
+      })
+      if (!response.ok) throw new Error("Failed to update note")
+      const updatedNote = await response.json()
+      setNotes(notes.map(n => n.id === id ? updatedNote : n))
+      
+      // Update folder notes if the note is in a folder
+      if (updatedNote.folderId) {
+        setFolders(folders.map(folder => {
+          if (folder.id === updatedNote.folderId) {
+            return {
+              ...folder,
+              notes: folder.notes?.map(n => n.id === id ? updatedNote : n) || []
+            }
+          }
+          return folder
+        }))
+      }
+      
+      setSelectedNote(updatedNote)
+      toast({
+        title: "Success",
+        description: "Note updated successfully",
+      })
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to update note",
+        variant: "destructive",
+      })
+    }
+  }
+
+  async function deleteNote(id: string) {
+    try {
+      const response = await fetch(`/api/notes?id=${id}`, {
+        method: "DELETE",
+      })
+      if (!response.ok) throw new Error("Failed to delete note")
+      
+      const noteToDelete = notes.find(n => n.id === id)
+      setNotes(notes.filter(n => n.id !== id))
+      
+      // Update folder notes if the note was in a folder
+      if (noteToDelete?.folderId) {
+        setFolders(folders.map(folder => {
+          if (folder.id === noteToDelete.folderId) {
+            return {
+              ...folder,
+              notes: folder.notes?.filter(n => n.id !== id) || []
+            }
+          }
+          return folder
+        }))
+      }
+      
+      if (selectedNote?.id === id) setSelectedNote(null)
+      toast({
+        title: "Success",
+        description: "Note deleted successfully",
+      })
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to delete note",
+        variant: "destructive",
+      })
+    }
   }
 
   return (
-    <main className="flex h-screen bg-background relative">
-      {/* Mobile sidebar overlay */}
-      {isSidebarOpen && (
-        <div 
-          className="fixed inset-0 bg-black/50 z-30 lg:hidden"
-          onClick={() => setIsSidebarOpen(false)}
-        />
-      )}
-      
-      {/* Sidebar */}
-      <div className={cn(
-        "fixed inset-y-0 left-0 z-40 lg:relative lg:flex transform transition-transform duration-200 ease-in-out",
-        isSidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
-      )}>
-        <Sidebar 
+    <div className="h-screen w-full">
+      <header className="flex h-14 items-center border-b px-4 lg:px-6">
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+          className="mr-4"
+        >
+          <MenuIcon className="h-6 w-6" />
+        </Button>
+        <div className="ml-auto">
+          <UserNav />
+        </div>
+      </header>
+      <div className="grid h-[calc(100vh-3.5rem)] lg:grid-cols-[270px_1fr]">
+        <Sidebar
+          isOpen={isSidebarOpen}
           notes={notes}
           folders={folders}
           selectedNote={selectedNote}
           onSelectNote={setSelectedNote}
-          onAddNote={handleAddNote}
-          onDeleteNote={handleDeleteNote}
-          onAddFolder={handleAddFolder}
-          onUpdateFolder={handleUpdateFolder}
-          onDeleteFolder={handleDeleteFolder}
+          onAddNote={addNote}
+          onDeleteNote={deleteNote}
+          onAddFolder={addFolder}
+          onUpdateFolder={updateFolder}
+          onDeleteFolder={deleteFolder}
         />
-      </div>
-
-      {/* Main content */}
-      <div className="flex-1 min-w-0">
-        <div className="lg:hidden p-4">
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => setIsSidebarOpen(true)}
-            className="mb-2"
-          >
-            <Menu className="h-6 w-6" />
-          </Button>
-        </div>
         {selectedNote ? (
-          <Editor 
-            note={selectedNote} 
-            onUpdateNote={handleUpdateNote}
+          <Editor
+            note={selectedNote}
+            onUpdate={(title: string, content: string) => updateNote(selectedNote.id, title, content)}
           />
         ) : (
-          <EmptyState />
+          <div className="flex h-full items-center justify-center">
+            <p className="text-muted-foreground">Select a note or create a new one</p>
+          </div>
         )}
       </div>
-    </main>
+    </div>
   )
 }
 

@@ -7,44 +7,43 @@ import { Textarea } from "@/components/ui/textarea"
 import { MoonIcon, SunIcon, Save } from "lucide-react"
 import { useTheme } from "next-themes"
 import { useToast } from "@/hooks/use-toast"
-import type { Note } from "@/types/note"
+
+interface Note {
+  id: string
+  title: string
+  content: string
+  folderId: string | null
+  createdAt: string
+  updatedAt: string
+}
 
 interface EditorProps {
   note: Note
-  onUpdateNote: (updatedNote: Note) => void
+  onUpdate: (title: string, content: string) => void
 }
 
-export default function Editor({ note, onUpdateNote }: EditorProps) {
+export default function Editor({ note, onUpdate }: EditorProps) {
   const [title, setTitle] = useState(note.title)
   const [content, setContent] = useState(note.content)
   const { theme, setTheme } = useTheme()
   const [isLoading, setIsLoading] = useState(false)
   const [mounted, setMounted] = useState(false)
   const { toast } = useToast()
+  const [isSaving, setIsSaving] = useState(false)
 
-  // Update local state when note changes
   useEffect(() => {
     setTitle(note.title)
     setContent(note.content)
   }, [note])
 
-  // Handle mounting state
   useEffect(() => {
     setMounted(true)
   }, [])
 
-  const handleSave = () => {
-    const updatedNote: Note = {
-      ...note,
-      title,
-      content,
-      updatedAt: new Date().toISOString()
-    }
-    onUpdateNote(updatedNote)
-    toast({
-      title: "Note saved",
-      description: "Your changes have been saved successfully."
-    })
+  const handleSave = async () => {
+    setIsSaving(true)
+    await onUpdate(title, content)
+    setIsSaving(false)
   }
 
   const handleSummarize = async () => {
@@ -75,7 +74,7 @@ export default function Editor({ note, onUpdateNote }: EditorProps) {
 
       if (data.summary) {
         setContent(data.summary)
-        handleSave() // Save the summarized content
+        handleSave()
         toast({
           title: "Summary created",
           description: "Your note has been summarized successfully.",
@@ -111,6 +110,7 @@ export default function Editor({ note, onUpdateNote }: EditorProps) {
             variant="outline" 
             size="icon"
             onClick={handleSave}
+            disabled={isSaving}
           >
             <Save className="h-5 w-5" />
           </Button>
