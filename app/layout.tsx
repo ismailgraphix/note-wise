@@ -1,14 +1,15 @@
-import type React from "react"
-import "./globals.css"
+
+import type { Metadata } from "next"
 import { Inter } from "next/font/google"
+import "./globals.css"
 import { Toaster } from "@/components/toaster"
 import { Providers } from "./providers"
 
 const inter = Inter({ subsets: ["latin"] })
 
-export const metadata = {
-  title: "Note Wise",
-  description: "A modern note-taking application",
+export const metadata: Metadata = {
+  title: "Note-wise",
+  description: "A simple note-taking app",
 }
 
 export default function RootLayout({
@@ -17,7 +18,7 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html lang="en">
       <body className={inter.className}>
         <Providers>
           {children}

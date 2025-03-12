@@ -1,6 +1,7 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
+import type { Note, Folder } from "@/types"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { ScrollArea } from "@/components/ui/scroll-area"
@@ -8,259 +9,452 @@ import { cn } from "@/lib/utils"
 import {
   ChevronDown,
   ChevronRight,
-  File,
-  Folder,
-  FolderPlus,
-  Plus,
-  Trash,
+  FileText,
+  FolderIcon,
+  PlusIcon,
+  TrashIcon,
+  PencilIcon,
   X,
+  Search,
 } from "lucide-react"
-import { useToast } from "@/hooks/use-toast"
-
-interface Note {
-  id: string
-  title: string
-  content: string
-  folderId: string | null
-  createdAt: string
-  updatedAt: string
-}
-
-interface Folder {
-  id: string
-  name: string
-  notes: Note[]
-}
+import { toast } from "@/hooks/use-toast"
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
+import { Badge } from "@/components/ui/badge"
 
 interface SidebarProps {
   isOpen: boolean
-  notes: Note[]
   folders: Folder[]
+  notes: Note[]
   selectedNote: Note | null
   onSelectNote: (note: Note) => void
-  onAddNote: (title: string, content: string, folderId: string | null) => void
-  onDeleteNote: (id: string) => void
-  onAddFolder: (name: string) => void
-  onUpdateFolder: (id: string, name: string) => void
-  onDeleteFolder: (id: string) => void
+  onAddFolder: (name: string) => Promise<void>
+  onUpdateFolder: (id: string, name: string) => Promise<void>
+  onDeleteFolder: (id: string) => Promise<void>
+  onAddNote: (title: string, folderId?: string) => Promise<void>
+  onDeleteNote: (id: string) => Promise<void>
 }
 
 export default function Sidebar({
   isOpen,
-  notes,
   folders,
+  notes,
   selectedNote,
   onSelectNote,
-  onAddNote,
-  onDeleteNote,
   onAddFolder,
   onUpdateFolder,
   onDeleteFolder,
+  onAddNote,
+  onDeleteNote,
 }: SidebarProps) {
-  const { toast } = useToast()
+  const [isAddingFolder, setIsAddingFolder] = useState(false)
+  const [newFolderName, setNewFolderName] = useState("")
   const [editingFolderId, setEditingFolderId] = useState<string | null>(null)
-  const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set())
+  const [editingFolderName, setEditingFolderName] = useState("")
+  const [expandedFolders, setExpandedFolders] = useState<Record<string, boolean>>({})
+  const [searchQuery, setSearchQuery] = useState("")
 
+  // Initialize expanded state for folders
+  useEffect(() => {
+    const initialExpandedState: Record<string, boolean> = {}
+    folders.forEach((folder) => {
+      initialExpandedState[folder.id] = !!(selectedNote?.folderId && selectedNote.folderId === folder.id)
+    })
+    setExpandedFolders(initialExpandedState)
+  }, [folders, selectedNote]) // Added missing dependencies
+
+  // Toggle folder expanded state
   const toggleFolder = (folderId: string) => {
-    const newExpanded = new Set(expandedFolders)
-    if (newExpanded.has(folderId)) {
-      newExpanded.delete(folderId)
-    } else {
-      newExpanded.add(folderId)
+    setExpandedFolders((prev) => ({
+      ...prev,
+      [folderId]: !prev[folderId],
+    }))
+  }
+
+  // Handle add folder
+  const handleAddFolder = async () => {
+    if (!newFolderName.trim()) {
+      toast({
+        title: "Error",
+        description: "Folder name cannot be empty",
+        variant: "destructive",
+      })
+      return
     }
-    setExpandedFolders(newExpanded)
+
+    try {
+      await onAddFolder(newFolderName)
+      setNewFolderName("")
+      setIsAddingFolder(false)
+      toast({
+        title: "Success",
+        description: "Folder created successfully",
+      })
+    } catch (err) {
+      // Using err instead of error to avoid the unused variable warning
+      console.error("Error creating folder:", err)
+      toast({
+        title: "Error",
+        description: "Failed to create folder",
+        variant: "destructive",
+      })
+    }
   }
 
-  const handleAddNote = (folderId: string | null = null) => {
-    const title = "Untitled Note"
-    const content = ""
-    onAddNote(title, content, folderId)
-  }
+  // Handle update folder
+  const handleUpdateFolder = async (id: string) => {
+    if (!editingFolderName.trim()) {
+      toast({
+        title: "Error",
+        description: "Folder name cannot be empty",
+        variant: "destructive",
+      })
+      return
+    }
 
-  const handleAddFolder = () => {
-    const name = "New Folder"
-    onAddFolder(name)
-  }
-
-  const handleUpdateFolder = (id: string, name: string) => {
-    if (name.trim()) {
-      onUpdateFolder(id, name.trim())
+    try {
+      await onUpdateFolder(id, editingFolderName)
       setEditingFolderId(null)
+      setEditingFolderName("")
+      toast({
+        title: "Success",
+        description: "Folder updated successfully",
+      })
+    } catch (err) {
+      // Using err instead of error to avoid the unused variable warning
+      console.error("Error updating folder:", err)
+      toast({
+        title: "Error",
+        description: "Failed to update folder",
+        variant: "destructive",
+      })
     }
   }
+
+  // Handle delete folder
+  const handleDeleteFolder = async (id: string) => {
+    if (!confirm("Are you sure you want to delete this folder? Notes will be moved to Unfiled Notes.")) {
+      return
+    }
+
+    try {
+      await onDeleteFolder(id)
+      toast({
+        title: "Success",
+        description: "Folder deleted successfully",
+      })
+    } catch (err) {
+      // Using err instead of error to avoid the unused variable warning
+      console.error("Error deleting folder:", err)
+      toast({
+        title: "Error",
+        description: "Failed to delete folder",
+        variant: "destructive",
+      })
+    }
+  }
+
+  // Handle add note
+  const handleAddNote = async (folderId?: string) => {
+    try {
+      await onAddNote("New Note", folderId)
+
+      // Expand the folder if a note is added to it
+      if (folderId) {
+        setExpandedFolders((prev) => ({
+          ...prev,
+          [folderId]: true,
+        }))
+      }
+
+      toast({
+        title: "Success",
+        description: "Note created successfully",
+      })
+    } catch (err) {
+      // Using err instead of error to avoid the unused variable warning
+      console.error("Error creating note:", err)
+      toast({
+        title: "Error",
+        description: "Failed to create note",
+        variant: "destructive",
+      })
+    }
+  }
+
+  // Handle delete note
+  const handleDeleteNote = async (id: string) => {
+    if (!confirm("Are you sure you want to delete this note?")) {
+      return
+    }
+
+    try {
+      await onDeleteNote(id)
+      toast({
+        title: "Success",
+        description: "Note deleted successfully",
+      })
+    } catch (err) {
+      // Using err instead of error to avoid the unused variable warning
+      console.error("Error deleting note:", err)
+      toast({
+        title: "Error",
+        description: "Failed to delete note",
+        variant: "destructive",
+      })
+    }
+  }
+
+  // Filter notes based on search query
+  const filteredNotes = notes.filter((note) => note.title.toLowerCase().includes(searchQuery.toLowerCase()))
+
+  // Filter folders based on search query
+  const filteredFolders = folders.filter(
+    (folder) =>
+      folder.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      folder.notes?.some((note) => note.title.toLowerCase().includes(searchQuery.toLowerCase())),
+  )
 
   if (!isOpen) return null
 
   return (
-    <div className="w-[270px] border-r bg-background">
+    <div className="w-[270px] border-r bg-background flex flex-col h-full">
       <div className="flex h-14 items-center border-b px-4">
-        <h2 className="text-lg font-semibold">Notes</h2>
+        <h2 className="text-lg font-semibold">Folders</h2>
         <div className="ml-auto flex gap-2">
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => handleAddNote(null)}
-            title="Add note"
-          >
-            <Plus className="h-4 w-4" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={handleAddFolder}
-            title="Add folder"
-          >
-            <FolderPlus className="h-4 w-4" />
-          </Button>
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button variant="ghost" size="icon" onClick={() => setIsAddingFolder(true)}>
+                  <PlusIcon className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>Add new folder</p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
         </div>
       </div>
-      <ScrollArea className="h-[calc(100vh-3.5rem)]">
+
+      <div className="p-2 border-b">
+        <div className="relative">
+          <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+          <Input
+            placeholder="Search notes..."
+            className="pl-8"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+          />
+        </div>
+      </div>
+
+      <ScrollArea className="flex-1">
         <div className="p-2">
-          {/* Folders */}
-          {folders.map((folder) => (
-            <div key={folder.id} className="mb-2">
-              <div className="group flex items-center">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-8 w-8"
-                  onClick={() => toggleFolder(folder.id)}
-                >
-                  {expandedFolders.has(folder.id) ? (
-                    <ChevronDown className="h-4 w-4" />
+          {isAddingFolder && (
+            <div className="flex gap-2 mb-2">
+              <Input
+                value={newFolderName}
+                onChange={(e) => setNewFolderName(e.target.value)}
+                placeholder="Folder name"
+                autoFocus
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") handleAddFolder()
+                  if (e.key === "Escape") {
+                    setIsAddingFolder(false)
+                    setNewFolderName("")
+                  }
+                }}
+              />
+              <Button size="sm" onClick={handleAddFolder}>
+                Add
+              </Button>
+              <Button size="sm" variant="ghost" onClick={() => setIsAddingFolder(false)}>
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+          )}
+
+          {filteredFolders.length > 0 ? (
+            filteredFolders.map((folder) => (
+              <div key={folder.id} className="mb-2">
+                <div className="group flex items-center">
+                  {editingFolderId === folder.id ? (
+                    <div className="flex flex-1 items-center">
+                      <Input
+                        value={editingFolderName}
+                        onChange={(e) => setEditingFolderName(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") handleUpdateFolder(folder.id)
+                          if (e.key === "Escape") {
+                            setEditingFolderId(null)
+                            setEditingFolderName("")
+                          }
+                        }}
+                        autoFocus
+                      />
+                      <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setEditingFolderId(null)}>
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </div>
                   ) : (
-                    <ChevronRight className="h-4 w-4" />
+                    <>
+                      <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => toggleFolder(folder.id)}>
+                        {expandedFolders[folder.id] ? (
+                          <ChevronDown className="h-4 w-4" />
+                        ) : (
+                          <ChevronRight className="h-4 w-4" />
+                        )}
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        className="flex-1 justify-start gap-2 px-2"
+                        onClick={() => toggleFolder(folder.id)}
+                      >
+                        <FolderIcon className="h-4 w-4" />
+                        <span className="truncate">{folder.name}</span>
+                        {folder.notes && folder.notes.length > 0 && (
+                          <Badge variant="outline" className="ml-auto">
+                            {folder.notes.length}
+                          </Badge>
+                        )}
+                      </Button>
+                      <div className="flex opacity-0 group-hover:opacity-100">
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8"
+                                onClick={() => {
+                                  setEditingFolderId(folder.id)
+                                  setEditingFolderName(folder.name)
+                                }}
+                              >
+                                <PencilIcon className="h-4 w-4" />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <p>Rename folder</p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8"
+                                onClick={() => handleDeleteFolder(folder.id)}
+                              >
+                                <TrashIcon className="h-4 w-4" />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <p>Delete folder</p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      </div>
+                    </>
                   )}
-                </Button>
-                {editingFolderId === folder.id ? (
-                  <div className="flex flex-1 items-center">
-                    <Input
-                      defaultValue={folder.name}
-                      className="h-8"
-                      onBlur={(e) => handleUpdateFolder(folder.id, e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") {
-                          handleUpdateFolder(folder.id, e.currentTarget.value)
-                        } else if (e.key === "Escape") {
-                          setEditingFolderId(null)
-                        }
-                      }}
-                      autoFocus
-                    />
+                </div>
+
+                {expandedFolders[folder.id] && (
+                  <div className="ml-4 mt-1 space-y-1">
+                    {folder.notes
+                      ?.filter((note) => note.title.toLowerCase().includes(searchQuery.toLowerCase()))
+                      .map((note) => (
+                        <div key={note.id} className="group flex items-center">
+                          <Button
+                            variant="ghost"
+                            className={cn(
+                              "flex-1 justify-start gap-2 px-2 py-1 h-auto",
+                              selectedNote?.id === note.id && "bg-accent",
+                            )}
+                            onClick={() => onSelectNote(note)}
+                          >
+                            <FileText className="h-4 w-4 shrink-0" />
+                            <span className="truncate">{note.title}</span>
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 opacity-0 group-hover:opacity-100"
+                            onClick={() => handleDeleteNote(note.id)}
+                          >
+                            <TrashIcon className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      ))}
                     <Button
                       variant="ghost"
-                      size="icon"
-                      className="h-8 w-8"
-                      onClick={() => setEditingFolderId(null)}
+                      className="w-full justify-start gap-2 px-2 text-muted-foreground"
+                      onClick={() => handleAddNote(folder.id)}
                     >
-                      <X className="h-4 w-4" />
+                      <PlusIcon className="h-4 w-4" />
+                      <span>Add Note</span>
                     </Button>
                   </div>
-                ) : (
-                  <>
-                    <Button
-                      variant="ghost"
-                      className="flex-1 justify-start gap-2 px-2"
-                      onClick={() => toggleFolder(folder.id)}
-                    >
-                      <Folder className="h-4 w-4" />
-                      <span className="truncate">{folder.name}</span>
-                    </Button>
-                    <div className="flex opacity-0 group-hover:opacity-100">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8"
-                        onClick={() => setEditingFolderId(folder.id)}
-                      >
-                        <Plus className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8"
-                        onClick={() => onDeleteFolder(folder.id)}
-                      >
-                        <Trash className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </>
                 )}
               </div>
-              {expandedFolders.has(folder.id) && (
-                <div className="ml-4 mt-1">
-                  {folder.notes?.map((note) => (
-                    <div
-                      key={note.id}
-                      className="group flex items-center"
-                    >
-                      <Button
-                        variant="ghost"
-                        className={cn(
-                          "flex-1 justify-start gap-2 px-2",
-                          selectedNote?.id === note.id && "bg-accent"
-                        )}
-                        onClick={() => onSelectNote(note)}
-                      >
-                        <File className="h-4 w-4" />
-                        <span className="truncate">{note.title}</span>
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8 opacity-0 group-hover:opacity-100"
-                        onClick={() => onDeleteNote(note.id)}
-                      >
-                        <Trash className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  ))}
-                  <Button
-                    variant="ghost"
-                    className="mt-1 w-full justify-start gap-2 px-2"
-                    onClick={() => handleAddNote(folder.id)}
-                  >
-                    <Plus className="h-4 w-4" />
-                    <span>Add Note</span>
-                  </Button>
-                </div>
-              )}
-            </div>
-          ))}
+            ))
+          ) : searchQuery ? (
+            <div className="py-4 text-center text-muted-foreground">No folders match your search</div>
+          ) : (
+            <div className="py-4 text-center text-muted-foreground">No folders yet. Create one to get started.</div>
+          )}
 
-          {/* Notes without folders */}
           <div className="mt-4">
-            <div className="px-2 pb-2 text-sm font-medium text-muted-foreground">
-              Unfiled Notes
+            <div className="px-2 pb-2 flex items-center justify-between">
+              <h3 className="text-sm font-medium text-muted-foreground">Unfiled Notes</h3>
+              <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => handleAddNote()}>
+                <PlusIcon className="h-3 w-3" />
+              </Button>
             </div>
-            {notes
+
+            {filteredNotes
               .filter((note) => !note.folderId)
               .map((note) => (
                 <div key={note.id} className="group flex items-center">
                   <Button
                     variant="ghost"
                     className={cn(
-                      "flex-1 justify-start gap-2 px-2",
-                      selectedNote?.id === note.id && "bg-accent"
+                      "flex-1 justify-start gap-2 px-2 py-1 h-auto",
+                      selectedNote?.id === note.id && "bg-accent",
                     )}
                     onClick={() => onSelectNote(note)}
                   >
-                    <File className="h-4 w-4" />
+                    <FileText className="h-4 w-4 shrink-0" />
                     <span className="truncate">{note.title}</span>
                   </Button>
                   <Button
                     variant="ghost"
                     size="icon"
                     className="h-8 w-8 opacity-0 group-hover:opacity-100"
-                    onClick={() => onDeleteNote(note.id)}
+                    onClick={() => handleDeleteNote(note.id)}
                   >
-                    <Trash className="h-4 w-4" />
+                    <TrashIcon className="h-4 w-4" />
                   </Button>
                 </div>
               ))}
+
+            {filteredNotes.filter((note) => !note.folderId).length === 0 && (
+              <div className="px-2 py-1 text-sm text-muted-foreground">No unfiled notes</div>
+            )}
           </div>
         </div>
       </ScrollArea>
+
+      <div className="p-2 border-t text-xs text-muted-foreground">
+        <div className="flex justify-between">
+          <span>Total notes: {notes.length}</span>
+          <span>Folders: {folders.length}</span>
+        </div>
+      </div>
     </div>
   )
 }
+

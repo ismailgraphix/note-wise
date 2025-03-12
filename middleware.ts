@@ -1,25 +1,29 @@
-import { getToken } from "next-auth/jwt"
-import { NextResponse } from "next/server"
-import type { NextRequest } from "next/server"
+import { withAuth } from "next-auth/middleware"
 
-export async function middleware(request: NextRequest) {
-  const token = await getToken({ req: request })
-  
-  if (!token) {
-    if (request.nextUrl.pathname.startsWith("/auth")) {
-      return NextResponse.next()
+export default withAuth({
+  callbacks: {
+    authorized: ({ req, token }) => {
+      const pathname = req.nextUrl.pathname
+      
+      // Protect API routes
+      if (pathname.startsWith('/api')) {
+        return !!token // require authentication for all API routes
+      }
+
+      // Allow public access to auth pages
+      if (pathname.startsWith('/auth')) {
+        return true
+      }
+
+      // Require authentication for all other pages
+      return !!token
     }
-    
-    return NextResponse.redirect(new URL("/auth/signin", request.url))
   }
-
-  if (request.nextUrl.pathname.startsWith("/auth")) {
-    return NextResponse.redirect(new URL("/", request.url))
-  }
-
-  return NextResponse.next()
-}
+})
 
 export const config = {
-  matcher: ["/((?!api|_next/static|_next/image|favicon.ico).*)"]
+  matcher: [
+    '/api/:path*',
+    '/((?!auth/.*|_next/static|_next/image|favicon.ico).*)',
+  ]
 } 

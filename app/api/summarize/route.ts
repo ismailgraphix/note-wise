@@ -1,49 +1,67 @@
 import { NextResponse } from "next/server"
+import { getServerSession } from "next-auth"
+import { generateText } from "ai"
+import { openai } from "@ai-sdk/openai"
+import { authOptions } from "../auth/[...nextauth]/auth.config"
 
-// Mock AI summarization function for testing
-function mockSummarize(text: string): string {
-  // This is a simple mock that returns a shortened version of the text
-  if (!text || text.trim() === "") {
-    return "No content to summarize"
-  }
-
-  // Split text into sentences and take the first few
-  const sentences = text.split(/[.!?]+/).filter((s) => s.trim().length > 0)
-  const summaryLength = Math.max(1, Math.min(3, Math.ceil(sentences.length / 3)))
-  const summary = sentences.slice(0, summaryLength).join(". ")
-
-  return summary + (summary.endsWith(".") ? "" : ".")
-}
-
-export async function POST(req: Request) {
+export async function POST(request: Request) {
   try {
-    // Parse the request body
-    const body = await req.json()
-    const { content } = body
+    // Verify authentication
+    const session = await getServerSession(authOptions)
 
-    console.log("Received content for summarization:", content?.substring(0, 50) + "...")
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    }
+
+    // Parse the request body
+    const { content } = await request.json()
 
     // Validate the content
     if (!content || typeof content !== "string" || content.trim() === "") {
-      console.log("Invalid content received")
       return NextResponse.json(
         {
-          error: "Invalid content. Please provide text to summarize.",
+          error: "Please provide text to summarize.",
         },
         { status: 400 },
       )
     }
 
-    // Generate summary (mock for now)
-    console.log("Generating summary...")
-    const summary = mockSummarize(content)
-    console.log("Summary generated:", summary)
+    // Extract text from HTML content
+    const textContent = content.replace(/<[^>]*>/g, " ").trim()
 
-    // Simulate API delay
-    await new Promise((resolve) => setTimeout(resolve, 1000))
+    if (textContent.length < 50) {
+      return NextResponse.json(
+        {
+          error: "Content is too short to summarize. Please provide more text.",
+        },
+        { status: 400 },
+      )
+    }
+
+    // Check if OpenAI API key is configured
+    if (!process.env.OPENAI_API_KEY) {
+      return NextResponse.json(
+        {
+          error: "OpenAI API key is not configured.",
+        },
+        { status: 500 },
+      )
+    }
+
+    // Generate summary using OpenAI
+    const { text: summary } = await generateText({
+      model: openai("gpt-3.5-turbo"),
+      prompt: `Summarize the following text concisely:\n\n${textContent}`,
+      system:
+        "You are a helpful assistant that summarizes text concisely. Create a clear, brief summary that captures the main points.",
+      maxTokens: 500,
+    })
+
+    // Format the summary as HTML paragraph
+    const formattedSummary = `<p>${summary}</p>`
 
     // Return the summary
-    return NextResponse.json({ summary })
+    return NextResponse.json({ summary: formattedSummary })
   } catch (error) {
     console.error("Error in summarize API:", error)
     return NextResponse.json({ error: "Failed to summarize content. Please try again." }, { status: 500 })
