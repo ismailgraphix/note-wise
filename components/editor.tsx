@@ -1,6 +1,8 @@
 "use client"
 
-import { useState, useEffect} from "react"
+import type React from "react"
+
+import { useState, useEffect } from "react"
 import type { Note } from "@/types"
 import { EditorContent, useEditor } from "@tiptap/react"
 import StarterKit from "@tiptap/starter-kit"
@@ -62,6 +64,7 @@ export default function Editor({ note, onUpdate, onUpdateTitle }: EditorProps) {
     if (editor && note.content !== editor.getHTML()) {
       editor.commands.setContent(note.content || "<p></p>")
     }
+    // Only update title state when note changes
     setTitle(note.title)
   }, [note, editor])
 
@@ -71,10 +74,23 @@ export default function Editor({ note, onUpdate, onUpdateTitle }: EditorProps) {
   }, [])
 
   // Handle title change
-  const handleTitleChange = (newTitle: string) => {
+  const handleTitleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const newTitle = e.target.value
     setTitle(newTitle)
-    if (onUpdateTitle) {
-      onUpdateTitle(newTitle)
+  }
+
+  // Handle title blur - only update when user finishes editing
+  const handleTitleBlur = () => {
+    if (title !== note.title && onUpdateTitle) {
+      onUpdateTitle(title)
+    }
+  }
+
+  // Handle title keydown - update on Enter key
+  const handleTitleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter" && title !== note.title && onUpdateTitle) {
+      onUpdateTitle(title)
+      e.currentTarget.blur()
     }
   }
 
@@ -90,7 +106,6 @@ export default function Editor({ note, onUpdate, onUpdateTitle }: EditorProps) {
         description: "Your note has been saved successfully.",
       })
     } catch (err) {
-      // Using err instead of error to avoid the unused variable warning
       console.error("Error saving:", err)
       toast({
         title: "Error",
@@ -138,7 +153,6 @@ export default function Editor({ note, onUpdate, onUpdateTitle }: EditorProps) {
         })
       }
     } catch (err) {
-      // Using err instead of error to avoid the unused variable warning
       console.error("Error during summarization:", err)
       toast({
         title: "Summarization failed",
@@ -163,7 +177,9 @@ export default function Editor({ note, onUpdate, onUpdateTitle }: EditorProps) {
         <div className="flex items-center justify-between mb-4">
           <Input
             value={title}
-            onChange={(e) => handleTitleChange(e.target.value)}
+            onChange={handleTitleChange}
+            onBlur={handleTitleBlur}
+            onKeyDown={handleTitleKeyDown}
             className="text-xl md:text-2xl font-bold bg-transparent border-0 p-0 focus-visible:ring-0"
             placeholder="Note title..."
           />

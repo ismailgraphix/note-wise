@@ -4,7 +4,7 @@ import { useState, useEffect } from "react"
 import { useSession } from "next-auth/react"
 import { useRouter } from "next/navigation"
 import { useMediaQuery } from "@/hooks/use-media-query"
-import type { Note, Folder } from "@/types/index"
+import type { Note, Folder } from "@/types"
 import Sidebar from "@/components/sidebar"
 import Editor from "@/components/editor"
 import { UserNav } from "@/components/user-nav"
@@ -24,7 +24,6 @@ export default function Home() {
   const [selectedNote, setSelectedNote] = useState<Note | null>(null)
   const [isSidebarOpen, setIsSidebarOpen] = useState(!isMobile)
   const [isLoading, setIsLoading] = useState(true)
-  // Removed unused isSaving state
 
   // Redirect to login if not authenticated
   useEffect(() => {
@@ -44,8 +43,6 @@ export default function Home() {
       fetchData()
     }
   }, [session]) // eslint-disable-line react-hooks/exhaustive-deps
-  // We're disabling the eslint rule here because fetchData is defined in the component
-  // and won't change between renders
 
   // Fetch all data
   const fetchData = async () => {
@@ -287,6 +284,7 @@ export default function Home() {
           onDeleteFolder={handleDeleteFolder}
           onAddNote={handleAddNote}
           onDeleteNote={handleDeleteNote}
+          onUpdateNote={handleUpdateNote}
         />
 
         <main className="flex-1 overflow-y-auto">

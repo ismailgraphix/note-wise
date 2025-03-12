@@ -32,6 +32,7 @@ interface SidebarProps {
   onDeleteFolder: (id: string) => Promise<void>
   onAddNote: (title: string, folderId?: string) => Promise<void>
   onDeleteNote: (id: string) => Promise<void>
+  onUpdateNote?: (id: string, updates: Partial<Note>) => Promise<void>
 }
 
 export default function Sidebar({
@@ -45,11 +46,14 @@ export default function Sidebar({
   onDeleteFolder,
   onAddNote,
   onDeleteNote,
+  onUpdateNote,
 }: SidebarProps) {
   const [isAddingFolder, setIsAddingFolder] = useState(false)
   const [newFolderName, setNewFolderName] = useState("")
   const [editingFolderId, setEditingFolderId] = useState<string | null>(null)
   const [editingFolderName, setEditingFolderName] = useState("")
+  const [editingNoteId, setEditingNoteId] = useState<string | null>(null)
+  const [editingNoteName, setEditingNoteName] = useState("")
   const [expandedFolders, setExpandedFolders] = useState<Record<string, boolean>>({})
   const [searchQuery, setSearchQuery] = useState("")
 
@@ -60,7 +64,7 @@ export default function Sidebar({
       initialExpandedState[folder.id] = !!(selectedNote?.folderId && selectedNote.folderId === folder.id)
     })
     setExpandedFolders(initialExpandedState)
-  }, [folders, selectedNote]) // Added missing dependencies
+  }, [folders, selectedNote])
 
   // Toggle folder expanded state
   const toggleFolder = (folderId: string) => {
@@ -90,7 +94,6 @@ export default function Sidebar({
         description: "Folder created successfully",
       })
     } catch (err) {
-      // Using err instead of error to avoid the unused variable warning
       console.error("Error creating folder:", err)
       toast({
         title: "Error",
@@ -120,13 +123,44 @@ export default function Sidebar({
         description: "Folder updated successfully",
       })
     } catch (err) {
-      // Using err instead of error to avoid the unused variable warning
       console.error("Error updating folder:", err)
       toast({
         title: "Error",
         description: "Failed to update folder",
         variant: "destructive",
       })
+    }
+  }
+
+  // Handle update note title
+  const handleUpdateNoteTitle = async (id: string) => {
+    if (!editingNoteName.trim()) {
+      toast({
+        title: "Error",
+        description: "Note title cannot be empty",
+        variant: "destructive",
+      })
+      return
+    }
+
+    try {
+      if (onUpdateNote) {
+        await onUpdateNote(id, { title: editingNoteName.trim() })
+        toast({
+          title: "Success",
+          description: "Note title updated successfully",
+        })
+      }
+    } catch (err) {
+      console.error("Error updating note title:", err)
+      toast({
+        title: "Error",
+        description: "Failed to update note title",
+        variant: "destructive",
+      })
+    } finally {
+      setEditingNoteId(null)
+      setEditingNoteName("")
     }
   }
 
@@ -143,7 +177,6 @@ export default function Sidebar({
         description: "Folder deleted successfully",
       })
     } catch (err) {
-      // Using err instead of error to avoid the unused variable warning
       console.error("Error deleting folder:", err)
       toast({
         title: "Error",
@@ -171,7 +204,6 @@ export default function Sidebar({
         description: "Note created successfully",
       })
     } catch (err) {
-      // Using err instead of error to avoid the unused variable warning
       console.error("Error creating note:", err)
       toast({
         title: "Error",
@@ -194,7 +226,6 @@ export default function Sidebar({
         description: "Note deleted successfully",
       })
     } catch (err) {
-      // Using err instead of error to avoid the unused variable warning
       console.error("Error deleting note:", err)
       toast({
         title: "Error",
@@ -212,6 +243,69 @@ export default function Sidebar({
     (folder) =>
       folder.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       folder.notes?.some((note) => note.title.toLowerCase().includes(searchQuery.toLowerCase())),
+  )
+
+  // Render a note item (used for both folder notes and unfiled notes)
+  const renderNoteItem = (note: Note) => (
+    <div key={note.id} className="group flex items-center">
+      {editingNoteId === note.id ? (
+        <div className="flex flex-1 items-center">
+          <Input
+            value={editingNoteName}
+            onChange={(e) => setEditingNoteName(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") handleUpdateNoteTitle(note.id)
+              if (e.key === "Escape") {
+                setEditingNoteId(null)
+                setEditingNoteName("")
+              }
+            }}
+            autoFocus
+          />
+          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setEditingNoteId(null)}>
+            <X className="h-4 w-4" />
+          </Button>
+        </div>
+      ) : (
+        <>
+          <Button
+            variant="ghost"
+            className={cn("flex-1 justify-start gap-2 px-2 py-1 h-auto", selectedNote?.id === note.id && "bg-accent")}
+            onClick={() => onSelectNote(note)}
+          >
+            <FileText className="h-4 w-4 shrink-0" />
+            <span className="truncate">{note.title}</span>
+          </Button>
+          <div className="flex opacity-0 group-hover:opacity-100">
+            {onUpdateNote && (
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8"
+                      onClick={() => {
+                        setEditingNoteId(note.id)
+                        setEditingNoteName(note.title)
+                      }}
+                    >
+                      <PencilIcon className="h-4 w-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>Rename note</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            )}
+            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleDeleteNote(note.id)}>
+              <TrashIcon className="h-4 w-4" />
+            </Button>
+          </div>
+        </>
+      )}
+    </div>
   )
 
   if (!isOpen) return null
@@ -366,29 +460,7 @@ export default function Sidebar({
                   <div className="ml-4 mt-1 space-y-1">
                     {folder.notes
                       ?.filter((note) => note.title.toLowerCase().includes(searchQuery.toLowerCase()))
-                      .map((note) => (
-                        <div key={note.id} className="group flex items-center">
-                          <Button
-                            variant="ghost"
-                            className={cn(
-                              "flex-1 justify-start gap-2 px-2 py-1 h-auto",
-                              selectedNote?.id === note.id && "bg-accent",
-                            )}
-                            onClick={() => onSelectNote(note)}
-                          >
-                            <FileText className="h-4 w-4 shrink-0" />
-                            <span className="truncate">{note.title}</span>
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8 opacity-0 group-hover:opacity-100"
-                            onClick={() => handleDeleteNote(note.id)}
-                          >
-                            <TrashIcon className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      ))}
+                      .map((note) => renderNoteItem(note))}
                     <Button
                       variant="ghost"
                       className="w-full justify-start gap-2 px-2 text-muted-foreground"
@@ -415,31 +487,7 @@ export default function Sidebar({
               </Button>
             </div>
 
-            {filteredNotes
-              .filter((note) => !note.folderId)
-              .map((note) => (
-                <div key={note.id} className="group flex items-center">
-                  <Button
-                    variant="ghost"
-                    className={cn(
-                      "flex-1 justify-start gap-2 px-2 py-1 h-auto",
-                      selectedNote?.id === note.id && "bg-accent",
-                    )}
-                    onClick={() => onSelectNote(note)}
-                  >
-                    <FileText className="h-4 w-4 shrink-0" />
-                    <span className="truncate">{note.title}</span>
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-8 opacity-0 group-hover:opacity-100"
-                    onClick={() => handleDeleteNote(note.id)}
-                  >
-                    <TrashIcon className="h-4 w-4" />
-                  </Button>
-                </div>
-              ))}
+            {filteredNotes.filter((note) => !note.folderId).map((note) => renderNoteItem(note))}
 
             {filteredNotes.filter((note) => !note.folderId).length === 0 && (
               <div className="px-2 py-1 text-sm text-muted-foreground">No unfiled notes</div>
